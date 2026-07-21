@@ -17,7 +17,9 @@ def run_random_forest_training(labeled_gpkg, model_output_path):
         "vehicle_fraction"
     ]
 
-    CLASS_NAMES = ["other", "road", "construction"]
+    # Map class labels correctly: 1=road, 2=construction, 3=other
+    # Order matches indices/labels if encoded, or we supply target_names ordered by class labels (1, 2, 3)
+    CLASS_NAMES = ["road", "construction", "other"]
 
     # ----------------------------
     # Load labelled training data
@@ -27,7 +29,7 @@ def run_random_forest_training(labeled_gpkg, model_output_path):
     print(f"Training on {len(labeled)} labelled segments")
 
     X = labeled[FEATURES].fillna(0)
-    y = labeled["label"]
+    y = labeled["class"]
 
     X_train, X_test, y_train, y_test = train_test_split(
         X,
@@ -54,10 +56,11 @@ def run_random_forest_training(labeled_gpkg, model_output_path):
     y_pred = clf.predict(X_test)
 
     print("\nClassification report")
-    print(classification_report(y_test, y_pred, target_names=CLASS_NAMES))
+    # labels=[1, 2, 3] ensures proper alignment with target_names since classes are numeric integers
+    print(classification_report(y_test, y_pred, labels=[1, 2, 3], target_names=CLASS_NAMES))
 
     print("\nConfusion matrix")
-    print(confusion_matrix(y_test, y_pred))
+    print(confusion_matrix(y_test, y_pred, labels=[1, 2, 3]))
 
     print("\nFeature importance")
     for name, imp in sorted(zip(FEATURES, clf.feature_importances_),
