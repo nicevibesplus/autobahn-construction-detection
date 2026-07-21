@@ -1,10 +1,6 @@
-# ====================================================
-# FILE: pipeline.py
-# ====================================================
 import time
 from pathlib import Path
 
-# Import steps from your separate script files
 from scripts.create_mosaic import run_mosaic_extraction
 from scripts.ndvi_calculation import run_ndvi_calculation
 from scripts.detect_lane_markings import run_lane_marking_detection
@@ -22,35 +18,35 @@ from profiles import PROFILES
 # ----------------------------------------------------
 # CONFIGURATION & BASE PATHS
 # ----------------------------------------------------
+BASE_NAME = "example_bottrop"
+
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
-INPUT_DIR = BASE_DIR / "data" / "input"
-OUTPUT_DIR = BASE_DIR / "data" / "output"
+INPUT_DIR = BASE_DIR / "data" / "input" / BASE_NAME
+OUTPUT_DIR = BASE_DIR / "data" / "output" / BASE_NAME
 MODELS_DIR = BASE_DIR / "models"
 
-# Dynamic Base Name Configuration
-BASE_NAME = "example_muenster"
+LABELED_GPKG = BASE_DIR / "segments_to_label.gpkg"  # Required only for training
 
-# External static input
-LABELED_GPKG = BASE_DIR / "segments_to_label.gpkg"  # Required if running training
-
-# Pipeline Parameters
+# Pipeline parameters
 GRID_SPLIT = 10
 ROAD_SEARCH_BUFFER_M = 30.0
 VEGETATION_THRESHOLD = 0.3
-DEVICE = "cpu"  # Change to "cuda" if using an NVIDIA GPU
-RUN_TRAINING = False  # Set to True if you want to retrain the model in the pipeline
+DEVICE = "cpu"        # Change to "cuda" if using an NVIDIA GPU
+RUN_TRAINING = False  # Set to True to retrain the model in the pipeline
+
+
+def step(number, description):
+    print(f"\n[{time.strftime('%H:%M:%S')}] STEP {number}: {description}")
 
 
 def main():
     start_time = time.time()
-    print(
-        f"[{time.strftime('%H:%M:%S')}] Starting Master Remote Sensing Pipeline for '{BASE_NAME}'..."
-    )
+    print(f"[{time.strftime('%H:%M:%S')}] Starting Master Remote Sensing Pipeline for '{BASE_NAME}'...")
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    # Automatically generated file paths based on BASE_NAME
+    # Auto-generated file paths based on BASE_NAME
     regbez_gpkg = DATA_DIR / f"{PROFILES[BASE_NAME]['geofabrik_region']}.gpkg"
     master_mosaic = OUTPUT_DIR / f"{BASE_NAME}.tif"
     ndvi_path = OUTPUT_DIR / f"{BASE_NAME}_ndvi.tif"
@@ -66,20 +62,17 @@ def main():
     rf_model_path = OUTPUT_DIR / f"{BASE_NAME}_construction_rf.pkl"
     classified_gpkg = OUTPUT_DIR / f"{BASE_NAME}_segments_classified.gpkg"
 
+    step(1, "Downloading input data (DOP tiles & OSM road network)...")
     download_dop_tiles(
         tiles=PROFILES[BASE_NAME]["dop_tiles"],
-        output_dir=INPUT_DIR
+        output_dir=INPUT_DIR,
     )
-    
     download_osm_gpkg(
         regbez=PROFILES[BASE_NAME]["geofabrik_region"],
-        output_dir=DATA_DIR
+        output_dir=DATA_DIR,
     )
-    
-    
-    # ----------------------------------------------------
-    # STEP 1: Master Mosaic Extraction
-    # ----------------------------------------------------
+
+    step(2, "Extracting master mosaic...")
     run_mosaic_extraction(
         input_dir=INPUT_DIR,
         output_dir=OUTPUT_DIR,
@@ -89,16 +82,15 @@ def main():
         master_mosaic_path=master_mosaic,
     )
 
-    # ----------------------------------------------------
-    # STEP 2: NDVI Calculation
-    # ----------------------------------------------------
+    step(3, "Calculating NDVI...")
     run_ndvi_calculation(
-        raster_path=master_mosaic, ndvi_path=ndvi_path, red_band=1, nir_band=4
+        raster_path=master_mosaic,
+        ndvi_path=ndvi_path,
+        red_band=1,
+        nir_band=4,
     )
 
-    # ----------------------------------------------------
-    # STEP 3: Lane Marking Detection & Refinement
-    # ----------------------------------------------------
+    step(4, "Detecting & refining lane markings...")
     run_lane_marking_detection(
         raster_path=master_mosaic,
         white_out=white_line_path,
@@ -107,9 +99,7 @@ def main():
         orange_ref_out=orange_ref_path,
     )
 
-    # ----------------------------------------------------
-    # STEP 4: Vehicle Detection
-    # ----------------------------------------------------
+    step(5, "Detecting vehicles...")
     run_vehicle_detection(
         master_mosaic_path=master_mosaic,
         vehicles_out_path=vehicles_gpkg,
@@ -117,14 +107,13 @@ def main():
         device=DEVICE,
     )
 
+    step(6, "Segmenting image into superpixels...")
     run_quickshift_segmentation(
         input_raster=master_mosaic,
         output_gpkg=segmentation_gpkg,
     )
 
-    # ----------------------------------------------------
-    # STEP 5: Surface Classification & Feature Extraction
-    # ----------------------------------------------------
+    step(7, "Classifying surface types...")
     run_surface_classification(
         raster_path=master_mosaic,
         ndvi_path=ndvi_path,
@@ -133,12 +122,14 @@ def main():
         vegetation_threshold=VEGETATION_THRESHOLD,
     )
 
+    step(8, "Analyzing segment texture...")
     run_texture_analysis(
         raster_path=master_mosaic,
         segments_path=segmentation_gpkg,
         output_path=segments_texture,
     )
 
+    step(9, "Fusing all segment features...")
     run_fuse_segments(
         segments_surface_path=segments_surface,
         segments_texture_path=segments_texture,
@@ -148,27 +139,23 @@ def main():
         output_path=segments_full,
     )
 
-    # ----------------------------------------------------
-    # STEP 6: Random Forest Training (Optional) & Prediction
-    # ----------------------------------------------------
+    step(10, "Random Forest training & prediction...")
     """
     if RUN_TRAINING:
         run_random_forest_training(
             labeled_gpkg=LABELED_GPKG,
-            model_output_path=rf_model_path
+            model_output_path=rf_model_path,
         )
 
     run_random_forest_prediction(
         segments_full_path=segments_full,
         model_path=rf_model_path,
-        output_path=classified_gpkg
+        output_path=classified_gpkg,
     )
     """
 
     elapsed = time.time() - start_time
-    print(
-        f"\n[{time.strftime('%H:%M:%S')}] PIPELINE COMPLETE SUCCESSFULLY in {elapsed:.2f} seconds!"
-    )
+    print(f"\n[{time.strftime('%H:%M:%S')}] PIPELINE COMPLETED SUCCESSFULLY in {elapsed:.2f} seconds!")
 
 
 if __name__ == "__main__":

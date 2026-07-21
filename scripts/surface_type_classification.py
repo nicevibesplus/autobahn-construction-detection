@@ -1,6 +1,3 @@
-# ====================================================
-# FILE: surface_type_classification.py
-# ====================================================
 import rasterio
 import numpy as np
 import geopandas as gpd
@@ -8,6 +5,7 @@ from rasterstats import zonal_stats
 from sklearn.cluster import KMeans
 from pathlib import Path
 from tqdm import tqdm
+
 
 def zonal_stats_with_progress(gdf, raster, affine, stats, nodata, desc):
     BATCH_SIZE = 5000
@@ -17,7 +15,10 @@ def zonal_stats_with_progress(gdf, raster, affine, stats, nodata, desc):
         results.extend(zonal_stats(batch, raster, affine=affine, stats=stats, nodata=nodata))
     return results
 
+
 def run_surface_classification(raster_path, ndvi_path, segments_path, output_path, vegetation_threshold=0.3):
+    print("Running surface type classification...")
+
     segments = gpd.read_file(segments_path)
     print(f"Loaded {len(segments)} segments")
 
@@ -46,17 +47,14 @@ def run_surface_classification(raster_path, ndvi_path, segments_path, output_pat
 
     non_veg = segments[~segments["is_vegetation"]].copy()
     features = non_veg[["mean_r", "mean_g", "mean_b"]].fillna(0)
-    
-    # Added tqdm progress bar loop to wrap KMeans fitting/prediction if desired, or keep standard fit and add progress description
-    print("Fitting KMeans clustering on non-vegetation segments...")
+
     kmeans = KMeans(n_clusters=5, random_state=42, n_init=10)
     non_veg["surface_class"] = kmeans.fit_predict(features)
 
     segments["surface_class"] = -1
     segments.loc[non_veg.index, "surface_class"] = non_veg["surface_class"]
 
-    # Added tqdm progress bar loop to wrap the file saving operation
-    for _ in tqdm(range(1), desc=f"Saving classified segments ({Path(output_path).name})"):
-        segments.to_file(output_path, driver="GPKG")
+    print(f"Saving classified segments to {Path(output_path).name}...")
+    segments.to_file(output_path, driver="GPKG")
 
     print(f"Done — wrote {output_path}")

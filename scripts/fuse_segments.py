@@ -1,11 +1,9 @@
-# ====================================================
-# FILE: fuse_segments.py
-# ====================================================
 import rasterio
 import geopandas as gpd
 from rasterstats import zonal_stats
 from tqdm import tqdm
 from pathlib import Path
+
 
 def zonal_stats_with_progress(gdf, raster, affine, stats, nodata, desc, batch_size=5000):
     results = []
@@ -14,41 +12,41 @@ def zonal_stats_with_progress(gdf, raster, affine, stats, nodata, desc, batch_si
         results.extend(zonal_stats(batch, raster, affine=affine, stats=stats, nodata=nodata))
     return results
 
+
 def run_fuse_segments(segments_surface_path, segments_texture_path, white_refined_path, orange_refined_path, vehicles_gpkg_path, output_path):
-    print("Loading segments...")
+    print("Fusing surface, texture, marking and vehicle attributes into segments...")
+
     segments = gpd.read_file(segments_surface_path)
-    
-    # Filter out empty/invalid segments where mean_r, mean_g, mean_b are null and ndvi_mean is 0
+
+    # Drop segments that carry no usable spectral information
     if all(col in segments.columns for col in ["mean_r", "mean_g", "mean_b", "ndvi_mean"]):
         initial_count = len(segments)
         invalid_mask = (
-            segments["mean_r"].isna() & 
-            segments["mean_g"].isna() & 
-            segments["mean_b"].isna() & 
+            segments["mean_r"].isna() &
+            segments["mean_g"].isna() &
+            segments["mean_b"].isna() &
             ((segments["ndvi_mean"] == 0) | segments["ndvi_mean"].isna())
         )
         segments = segments[~invalid_mask].copy()
         print(f"  Filtered out {initial_count - len(segments)} empty/uninitialized segments.")
 
-    # Reset index so that segment indexing aligns properly with filtered or sequential row indices
     segments = segments.reset_index(drop=True)
     segments["segment_id"] = range(len(segments))
     print(f"  {len(segments)} segments loaded")
 
     print("Merging texture column...")
     texture = gpd.read_file(segments_texture_path)
-    
-    # If texture file contains all original rows, align texture values by filtering out the same invalid mask
+
+    # Apply the same invalid-row filter so texture aligns with segments
     if len(texture) > len(segments) and all(col in texture.columns for col in ["mean_r", "mean_g", "mean_b", "ndvi_mean"]):
         texture_invalid_mask = (
-            texture["mean_r"].isna() & 
-            texture["mean_g"].isna() & 
-            texture["mean_b"].isna() & 
+            texture["mean_r"].isna() &
+            texture["mean_g"].isna() &
+            texture["mean_b"].isna() &
             ((texture["ndvi_mean"] == 0) | texture["ndvi_mean"].isna())
         )
         texture = texture[~texture_invalid_mask].copy().reset_index(drop=True)
 
-    # Fallback safety check: slice or reindex texture values to match the filtered segments length exactly
     if len(texture) != len(segments):
         print(f"  [WARNING] Texture row count ({len(texture)}) does not match segments count ({len(segments)}). Reindexing/slicing to match.")
         texture = texture.iloc[:len(segments)]
@@ -68,7 +66,7 @@ def run_fuse_segments(segments_surface_path, segments_texture_path, white_refine
     print("Computing lane marking zonal stats...")
     white_stats = zonal_stats_with_progress(segments, white_arr, white_transform, "sum", 0, "White markings")
     orange_stats = zonal_stats_with_progress(segments, orange_arr, orange_transform, "sum", 0, "Orange markings")
-    
+
     segments["marking_white_sum"] = [s["sum"] or 0 for s in white_stats]
     segments["marking_orange_sum"] = [s["sum"] or 0 for s in orange_stats]
     print(f"  white sum total: {segments['marking_white_sum'].sum():.0f}")
@@ -92,9 +90,7 @@ def run_fuse_segments(segments_surface_path, segments_texture_path, white_refine
     segments["vehicle_fraction"] = segments["vehicle_area"] / segments.geometry.area
     print(f"  {(segments['vehicle_fraction'] > 0).sum()} segments have some vehicle overlap")
 
-    print(f"Saving {output_path}...")
-    
-    for _ in tqdm(range(1), desc=f"Saving fused segments ({Path(output_path).name})"):
-        segments.to_file(output_path, driver="GPKG")
-        
+    print(f"Saving {Path(output_path).name}...")
+    segments.to_file(output_path, driver="GPKG")
+
     print(f"Done — {len(segments)} segments")
