@@ -1,0 +1,22 @@
+surface type classification
+ndvi_step1
+texture_analysis
+detect_lane_markings
+refine_lane_markings
+fuse_segments
+classify_construction
+sample_for_labeling
+random forest
+
+Pipeline:
+1. crop image to street buffer
+2. segmentation OTB -> Segmentation -> Menshift -> 
+    { 'in' : 'C:/Users/flori/Documents/__Module/2026_SoSe/High_Res/Project/master_merged_imagery.tif', 'filter' : 'meanshift', 'filter.meanshift.spatialr' : 6, 'filter.meanshift.ranger' : 15, 'filter.meanshift.thres' : 0.1, 'filter.meanshift.maxiter' : 100, 'filter.meanshift.minsize' : 40, 'mode' : 'vector', 'mode.vector.out' : 'C:/Users/flori/Documents/__Module/2026_SoSe/High_Res/Project/First_Segmentation_Vector.gpkg', 'mode.vector.outmode' : 'ulco', 'mode.vector.inmask' : None, 'mode.vector.neighbor' : False, 'mode.vector.stitch' : True, 'mode.vector.minsize' : 1, 'mode.vector.simplify' : 0.1, 'mode.vector.layername' : '', 'mode.vector.fieldname' : '', 'mode.vector.tilesize' : 1024, 'mode.vector.startlabel' : 1, 'mode.vector.ogroptions' : '', 'outputpixeltype' : 5 }
+3. ndvi_calculation.py
+4. object based surface classification
+    surface_type_classification.py
+5. texture_analysis.py
+6. detect_lane_markings.py and refine_lane_markings.py
+7. fuse_segments.py
+8. predict_random_forest.py
+9. Dissolve in predicted classes (3 multipart polygons remaining)
