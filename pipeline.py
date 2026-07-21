@@ -17,6 +17,7 @@ from scripts.predict_random_forest import run_random_forest_prediction
 from scripts.quickshift_segmentation import run_quickshift_segmentation
 from scripts.download_dop import download_dop_tiles
 from scripts.download_osm import download_osm_gpkg
+from profiles import PROFILES
 
 # ----------------------------------------------------
 # CONFIGURATION & BASE PATHS
@@ -28,10 +29,9 @@ OUTPUT_DIR = BASE_DIR / "data" / "output"
 MODELS_DIR = BASE_DIR / "models"
 
 # Dynamic Base Name Configuration
-BASE_NAME = "example_bottrop"
+BASE_NAME = "example_muenster"
 
-# External static inputs
-ROADS_GPKG = BASE_DIR / "data" / "duesseldorf-regbez.gpkg"
+# External static input
 LABELED_GPKG = BASE_DIR / "segments_to_label.gpkg"  # Required if running training
 
 # Pipeline Parameters
@@ -51,6 +51,7 @@ def main():
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     # Automatically generated file paths based on BASE_NAME
+    regbez_gpkg = DATA_DIR / f"{PROFILES[BASE_NAME]['geofabrik_region']}.gpkg"
     master_mosaic = OUTPUT_DIR / f"{BASE_NAME}.tif"
     ndvi_path = OUTPUT_DIR / f"{BASE_NAME}_ndvi.tif"
     white_line_path = OUTPUT_DIR / f"{BASE_NAME}_lane_markings_white.tif"
@@ -66,12 +67,12 @@ def main():
     classified_gpkg = OUTPUT_DIR / f"{BASE_NAME}_segments_classified.gpkg"
 
     download_dop_tiles(
-        preset_name=BASE_NAME,
+        tiles=PROFILES[BASE_NAME]["dop_tiles"],
         output_dir=INPUT_DIR
     )
     
     download_osm_gpkg(
-        profile_name=BASE_NAME,
+        regbez=PROFILES[BASE_NAME]["geofabrik_region"],
         output_dir=DATA_DIR
     )
     
@@ -82,7 +83,7 @@ def main():
     run_mosaic_extraction(
         input_dir=INPUT_DIR,
         output_dir=OUTPUT_DIR,
-        roads_gpkg=ROADS_GPKG,
+        roads_gpkg=regbez_gpkg,
         grid_split=GRID_SPLIT,
         road_search_buffer_m=ROAD_SEARCH_BUFFER_M,
         master_mosaic_path=master_mosaic,

@@ -6,23 +6,14 @@ import requests
 from pathlib import Path
 from tqdm import tqdm
 
-# Define presets mapping example names to their corresponding tile identifiers
-PRESETS = {
-    "example_bottrop": ["355_5707", "356_5707", "356_5708", "357_5707", "357_5708"]
-}
 
 
-def download_dop_tiles(preset_name, output_dir):
+def download_dop_tiles(tiles, output_dir):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    if preset_name not in PRESETS:
-        print(
-            f"[ERROR] Preset '{preset_name}' not found. Available presets: {list(PRESETS.keys())}"
-        )
-        return
-
-    tiles = PRESETS[preset_name]
+    for tile in tiles:
+        print(f"Starting download for tile: {tile}")
     years_to_try = [
         2026,
         2025,
@@ -31,7 +22,7 @@ def download_dop_tiles(preset_name, output_dir):
     ]  # Attempt to download from the latest year first
     base_url_template = "https://www.opengeodata.nrw.de/produkte/geobasis/lusat/akt/dop/dop_jp2_f10/dop10rgbi_32_{tile}_1_nw_{year}.jp2"
 
-    print(f"Starting download for preset '{preset_name}' ({len(tiles)} tiles)...")
+    print(f"Starting download ({len(tiles)} tiles)...")
 
     for tile in tiles:
         downloaded = False

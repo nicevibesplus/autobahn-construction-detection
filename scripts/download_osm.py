@@ -7,26 +7,21 @@ requests = __import__('requests')
 from pathlib import Path
 from tqdm import tqdm
 
-# Map profiles to their respective Geofabrik subregion identifier
-PROFILE_REGIONS = {
-    "example_bottrop": "duesseldorf-regbez"
-}
 
-def download_osm_gpkg(profile_name, output_dir):
+def download_osm_gpkg(regbez, output_dir):
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    
-    if profile_name not in PROFILE_REGIONS:
-        print(f"[ERROR] Profile '{profile_name}' not mapped to a region. Available profiles: {list(PROFILE_REGIONS.keys())}")
-        return
 
-    region = PROFILE_REGIONS[profile_name]
-    url = f"https://download.geofabrik.de/europe/germany/nordrhein-westfalen/{region}-latest-free.gpkg.zip"
-    
-    zip_filename = f"{region}-latest-free.gpkg.zip"
+    url = f"https://download.geofabrik.de/europe/germany/nordrhein-westfalen/{regbez}-latest-free.gpkg.zip"
+
+    zip_filename = f"{regbez}-latest-free.gpkg.zip"
     zip_path = output_dir / zip_filename
-    
-    print(f"Starting download for profile '{profile_name}' (Region: {region})...")
+
+    print(f"Starting download for region '{regbez}'...")
+    d = output_dir / f"{regbez}.gpkg"
+    if d.exists():
+        print(f"  [SKIP] Geofabrik .gpkg already exists for {regbez}. Skipping download.")
+        return
     
     try:
         response = requests.get(url, stream=True)
@@ -58,6 +53,6 @@ def download_osm_gpkg(profile_name, output_dir):
         print("Geofabrik download and extraction complete!")
 
     except requests.exceptions.RequestException as e:
-        print(f"[ERROR] Failed to download Geofabrik data for {region}: {e}")
+        print(f"[ERROR] Failed to download Geofabrik data for {regbez}: {e}")
     except zipfile.BadZipFile:
         print(f"[ERROR] Downloaded file is not a valid zip archive.")
