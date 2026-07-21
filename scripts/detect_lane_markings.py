@@ -35,15 +35,17 @@ def run_lane_marking_detection(raster_path, white_out, orange_out, white_ref_out
     orange_line_img = np.zeros_like(gray, dtype=np.uint8)
 
     if lines is not None:
-        for line in tqdm(lines, desc="Processing line segments"):
-            x1, y1, x2, y2 = np.array(line).reshape(-1).astype(int)
-            mx, my = (x1 + x2) // 2, (y1 + y2) // 2
-            my = min(max(my, 0), gray.shape[0] - 1)
-            mx = min(max(mx, 0), gray.shape[1] - 1)
-            if white_mask[my, mx] > 0:
-                cv2.line(white_line_img, (x1, y1), (x2, y2), 255, 2)
-            elif orange_mask[my, mx] > 0:
-                cv2.line(orange_line_img, (x1, y1), (x2, y2), 255, 2)
+        # Vectorized midpoint classification (was a per-line Python loop)
+        L = lines.reshape(-1, 4).astype(int)
+        mx = np.clip((L[:, 0] + L[:, 2]) // 2, 0, gray.shape[1] - 1)
+        my = np.clip((L[:, 1] + L[:, 3]) // 2, 0, gray.shape[0] - 1)
+        is_white = white_mask[my, mx] > 0
+        is_orange = (~is_white) & (orange_mask[my, mx] > 0)
+
+        for x1, y1, x2, y2 in L[is_white]:
+            cv2.line(white_line_img, (x1, y1), (x2, y2), 255, 2)
+        for x1, y1, x2, y2 in L[is_orange]:
+            cv2.line(orange_line_img, (x1, y1), (x2, y2), 255, 2)
 
     profile.update(dtype=rasterio.uint8, count=1)
     with rasterio.open(white_out, "w", **profile) as dst:
@@ -88,13 +90,15 @@ def refine_markings(in_path, out_path, extension_pixels=20):
 
     # Extend outwards from each endpoint along its local orientation
     extension_mask = np.zeros_like(binary_mask)
+    h, w = skeleton.shape
     for ey, ex in tqdm(list(zip(end_y, end_x)), desc="Extending endpoints"):
-        window = skeleton[max(0, ey - 3):min(skeleton.shape[0], ey + 4),
-                          max(0, ex - 3):min(skeleton.shape[1], ex + 4)]
+        y0, y1 = max(0, ey - 3), min(h, ey + 4)
+        x0, x1 = max(0, ex - 3), min(w, ex + 4)
+        window = skeleton[y0:y1, x0:x1]
         wy, wx = np.where(window == 1)
 
         if len(wy) > 1:
-            pts = np.column_stack((wx + max(0, ex - 3), wy + max(0, ey - 3)))
+            pts = np.column_stack((wx + x0, wy + y0))
             distances = np.sum((pts - np.array([ex, ey])) ** 2, axis=1)
             far_pt = pts[np.argmax(distances)]
 
@@ -111,18 +115,29 @@ def refine_markings(in_path, out_path, extension_pixels=20):
 
     extended_mask = np.maximum(binary_mask, extension_mask) * 255
 
-    n_labels, labels, _, _ = cv2.connectedComponentsWithStats(extended_mask.astype(np.uint8), connectivity=8)
+    # Capture stats so we can use per-component bounding boxes
+    n_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
+        extended_mask.astype(np.uint8), connectivity=8)
 
     keep_mask = np.zeros_like(extended_mask)
     for label_id in tqdm(range(1, n_labels), desc=f"Filtering components ({Path(in_path).name})"):
-        component = (labels == label_id).astype(np.uint8) * 255
+        x, y, bw, bh, area = stats[label_id]
+
+        # Cheap reject: bbox diagonal is an upper bound on true length
+        if np.hypot(bw, bh) * pixel_size < MIN_LENGTH_M:
+            continue
+
+        # Work only inside the component's bounding box (was full-image scans)
+        sub_labels = labels[y:y + bh, x:x + bw]
+        component = (sub_labels == label_id).astype(np.uint8) * 255
+
         contours, _ = cv2.findContours(component, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if not contours:
             continue
-        (_, _), (w, h), _ = cv2.minAreaRect(contours[0])
-        length_m = max(w, h) * pixel_size
+        (_, _), (rw, rh), _ = cv2.minAreaRect(contours[0])
+        length_m = max(rw, rh) * pixel_size
         if length_m >= MIN_LENGTH_M:
-            keep_mask[labels == label_id] = 255
+            keep_mask[y:y + bh, x:x + bw][sub_labels == label_id] = 255
 
     profile.update(dtype=rasterio.uint8, count=1)
     with rasterio.open(out_path, "w", **profile) as dst:

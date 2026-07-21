@@ -36,7 +36,7 @@ def run_mosaic_extraction(input_dir, output_dir, roads_gpkg, grid_split, road_se
     print(f"\n[{time.strftime('%H:%M:%S')}] --- Phase 1: Bounding Box Culling ---")
 
     gdf_all_roads = gpd.read_file(str(roads_gpkg), layer='gis_osm_roads_free')
-    gdf_all_roads = gdf_all_roads[gdf_all_roads['fclass'] == 'motorway']
+    gdf_all_roads = gdf_all_roads[gdf_all_roads['fclass'].isin(['motorway','motorway_link'])]
 
     jp2_files = glob.glob(os.path.join(input_dir, "*.jp2"))
     if not jp2_files:
