@@ -22,7 +22,7 @@ def run_lane_marking_detection(raster_path, white_out, orange_out, white_ref_out
     white_mask = cv2.inRange(hsv, (0, 0, 180), (180, 40, 255))
     orange_mask = cv2.inRange(hsv, (10, 100, 100), (35, 255, 255))
 
-    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 1))
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
     tophat = cv2.morphologyEx(gray, cv2.MORPH_TOPHAT, kernel)
 
     combined_mask = cv2.bitwise_or(white_mask, orange_mask)

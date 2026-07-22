@@ -30,29 +30,48 @@ def run_fuse_segments(segments_surface_path, segments_texture_path, white_refine
         segments = segments[~invalid_mask].copy()
         print(f"  Filtered out {initial_count - len(segments)} empty/uninitialized segments.")
 
-    segments = segments.reset_index(drop=True)
-    segments["segment_id"] = range(len(segments))
+    # tested
+    # segments = segments.reset_index(drop=True)
+    # segments["segment_id"] = range(len(segments))
+    # print(f"  {len(segments)} segments loaded")
+
+    # print("Merging texture column...")
+    # texture = gpd.read_file(segments_texture_path)
+
+    # # Apply the same invalid-row filter so texture aligns with segments
+    # if len(texture) > len(segments) and all(col in texture.columns for col in ["mean_r", "mean_g", "mean_b", "ndvi_mean"]):
+    #     texture_invalid_mask = (
+    #         texture["mean_r"].isna() &
+    #         texture["mean_g"].isna() &
+    #         texture["mean_b"].isna() &
+    #         ((texture["ndvi_mean"] == 0) | texture["ndvi_mean"].isna())
+    #     )
+    #     texture = texture[~texture_invalid_mask].copy().reset_index(drop=True)
+
+    # if len(texture) != len(segments):
+    #     print(f"  [WARNING] Texture row count ({len(texture)}) does not match segments count ({len(segments)}). Reindexing/slicing to match.")
+    #     texture = texture.iloc[:len(segments)]
+
+    # segments["texture_mean"] = texture["texture_mean"].values
+    # print("  done")
+
+    #testing
     print(f"  {len(segments)} segments loaded")
 
     print("Merging texture column...")
-    texture = gpd.read_file(segments_texture_path)
+    texture = gpd.read_file(segments_texture_path)[["segment_id", "texture_mean"]]
 
-    # Apply the same invalid-row filter so texture aligns with segments
-    if len(texture) > len(segments) and all(col in texture.columns for col in ["mean_r", "mean_g", "mean_b", "ndvi_mean"]):
-        texture_invalid_mask = (
-            texture["mean_r"].isna() &
-            texture["mean_g"].isna() &
-            texture["mean_b"].isna() &
-            ((texture["ndvi_mean"] == 0) | texture["ndvi_mean"].isna())
-        )
-        texture = texture[~texture_invalid_mask].copy().reset_index(drop=True)
+    segments = segments.merge(texture, on="segment_id", how="left", validate="one_to_one")
 
-    if len(texture) != len(segments):
-        print(f"  [WARNING] Texture row count ({len(texture)}) does not match segments count ({len(segments)}). Reindexing/slicing to match.")
-        texture = texture.iloc[:len(segments)]
-
-    segments["texture_mean"] = texture["texture_mean"].values
+    missing = segments["texture_mean"].isna().sum()
+    if missing:
+        print(f"  [WARNING] {missing} segments had no matching texture row after merge.")
     print("  done")
+
+
+
+
+
 
     print("Loading marking rasters into memory...")
     with rasterio.open(white_refined_path) as src:

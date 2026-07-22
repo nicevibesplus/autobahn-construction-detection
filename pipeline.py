@@ -1,3 +1,8 @@
+import os
+os.environ.pop("PROJ_LIB", None)
+os.environ.pop("PROJ_DATA", None)
+os.environ.pop("GDAL_DATA", None)
+
 import time
 from pathlib import Path
 
@@ -18,13 +23,14 @@ from profiles import PROFILES
 # ----------------------------------------------------
 # CONFIGURATION & BASE PATHS
 # ----------------------------------------------------
-BASE_NAME = "example_kamen" # Change this to the desired profile name from profiles.py
+BASE_NAME = "example_muenster" # Change this to the desired profile name from profiles.py
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 INPUT_DIR = BASE_DIR / "data" / "input" / BASE_NAME
 OUTPUT_DIR = BASE_DIR / "data" / "output" / BASE_NAME
 MODELS_DIR = BASE_DIR / "models"
+surface_kmeans_path = MODELS_DIR / "surface_kmeans.pkl"
 
 LABELED_GPKG = DATA_DIR / "labeled_segments.gpkg"  # Required only for training
 
@@ -34,6 +40,8 @@ ROAD_SEARCH_BUFFER_M = 30.0
 VEGETATION_THRESHOLD = 0.3
 DEVICE = "cpu"  # Change to "cuda" if using an NVIDIA GPU
 RUN_TRAINING = True  # Set to True to retrain the model in the pipeline
+FIT_NEW_SURFACE_MODEL = True   # True only when (re)building the reference clustering
+
 
 
 def step(number, description):
@@ -62,6 +70,7 @@ def main():
     segments_texture = OUTPUT_DIR / f"{BASE_NAME}_segments_with_texture.gpkg"
     segments_full = OUTPUT_DIR / f"{BASE_NAME}_segments_full.gpkg"
     rf_model_path = OUTPUT_DIR / f"{BASE_NAME}_construction_rf.pkl"
+    #rf_model_path = BASE_DIR.parent / "construction_rf.pkl"
     classified_gpkg = OUTPUT_DIR / f"{BASE_NAME}_segments_classified.gpkg"
     
     step(1, "Downloading input data (DOP tiles & OSM road network)...")
@@ -122,6 +131,8 @@ def main():
         segments_path=segmentation_gpkg,
         output_path=segments_surface,
         vegetation_threshold=VEGETATION_THRESHOLD,
+        kmeans_model_path=surface_kmeans_path,
+        fit_new_model=FIT_NEW_SURFACE_MODEL,
     )
 
     step(8, "Analyzing segment texture...")
@@ -141,19 +152,19 @@ def main():
         output_path=segments_full,
     )
     
-    step(10, "Random Forest training & prediction...")
+    # step(10, "Random Forest training & prediction...")
 
-    if RUN_TRAINING:
-        run_random_forest_training(
-            labeled_gpkg=LABELED_GPKG,
-            model_output_path=rf_model_path,
-        )
+    # if RUN_TRAINING:
+    #     run_random_forest_training(
+    #         labeled_gpkg=LABELED_GPKG,
+    #         model_output_path=rf_model_path,
+    #     )
 
-    run_random_forest_prediction(
-        segments_full_path=segments_full,
-        model_path=rf_model_path,
-        output_path=classified_gpkg,
-    )
+    # run_random_forest_prediction(
+    #     segments_full_path=segments_full,
+    #     model_path=rf_model_path,
+    #     output_path=classified_gpkg,
+    # )
 
     elapsed = time.time() - start_time
     print(

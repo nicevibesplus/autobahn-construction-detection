@@ -5,6 +5,7 @@ from rasterstats import zonal_stats
 from sklearn.cluster import KMeans
 from pathlib import Path
 from tqdm import tqdm
+import joblib
 
 
 def zonal_stats_with_progress(gdf, raster, affine, stats, nodata, desc):
@@ -16,7 +17,7 @@ def zonal_stats_with_progress(gdf, raster, affine, stats, nodata, desc):
     return results
 
 
-def run_surface_classification(raster_path, ndvi_path, segments_path, output_path, vegetation_threshold=0.3):
+def run_surface_classification(raster_path, ndvi_path, segments_path, output_path, vegetation_threshold=0.3, kmeans_model_path=None, fit_new_model=False):
     print("Running surface type classification...")
 
     segments = gpd.read_file(segments_path)
@@ -45,11 +46,35 @@ def run_surface_classification(raster_path, ndvi_path, segments_path, output_pat
     segments["is_vegetation"] = segments["ndvi_mean"] > vegetation_threshold
     print(f"Flagged {segments['is_vegetation'].sum()} of {len(segments)} objects as vegetation")
 
+
+    #uncommented for testing
+    # non_veg = segments[~segments["is_vegetation"]].copy()
+    # features = non_veg[["mean_r", "mean_g", "mean_b"]].fillna(0)
+
+    # kmeans = KMeans(n_clusters=5, random_state=42, n_init=10)
+
+    # non_veg["surface_class"] = kmeans.fit_predict(features)
+
+
+    #testing
     non_veg = segments[~segments["is_vegetation"]].copy()
     features = non_veg[["mean_r", "mean_g", "mean_b"]].fillna(0)
 
-    kmeans = KMeans(n_clusters=5, random_state=42, n_init=10)
-    non_veg["surface_class"] = kmeans.fit_predict(features)
+    kmeans_model_path = Path(kmeans_model_path)
+
+    if fit_new_model or not kmeans_model_path.exists():
+        print(f"Fitting new surface KMeans model -> {kmeans_model_path.name}")
+        kmeans = KMeans(n_clusters=5, random_state=42, n_init=10)
+        kmeans.fit(features)
+        kmeans_model_path.parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump(kmeans, kmeans_model_path)
+    else:
+        print(f"Loading existing surface KMeans model from {kmeans_model_path.name}")
+        kmeans = joblib.load(kmeans_model_path)
+
+    non_veg["surface_class"] = kmeans.predict(features)   # predict, not fit_predict
+
+
 
     segments["surface_class"] = -1
     segments.loc[non_veg.index, "surface_class"] = non_veg["surface_class"]
